@@ -1,4 +1,4 @@
-from sentence_transformers.readers import InputExample
+from . import InputExample
 import csv
 import os
 
