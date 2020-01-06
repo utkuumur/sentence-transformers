@@ -242,7 +242,8 @@ class SentenceTransformer(nn.Sequential):
             max_grad_norm: float = 1,
             fp16: bool = False,
             fp16_opt_level: str = 'O1',
-            local_rank: int = -1
+            local_rank: int = -1,
+            save_epoch: bool = True
             ):
         """
         Train the model with the given training objective
@@ -370,6 +371,9 @@ class SentenceTransformer(nn.Sequential):
                     for loss_model in loss_models:
                         loss_model.zero_grad()
                         loss_model.train()
+
+                if save_epoch:
+                    self.save(output_path)
 
             self._eval_during_training(evaluator, output_path, save_best_model, epoch, -1)
 
