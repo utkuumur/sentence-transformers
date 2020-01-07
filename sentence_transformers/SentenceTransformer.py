@@ -243,7 +243,8 @@ class SentenceTransformer(nn.Sequential):
             fp16: bool = False,
             fp16_opt_level: str = 'O1',
             local_rank: int = -1,
-            save_epoch: bool = True
+            save_epoch: bool = True,
+            gradient_accumulation_steps: int = 4
             ):
         """
         Train the model with the given training objective
@@ -310,6 +311,9 @@ class SentenceTransformer(nn.Sequential):
             optimizers.append(optimizer)
             schedulers.append(scheduler)
 
+
+
+
         if fp16:
             try:
                 from apex import amp
@@ -350,6 +354,9 @@ class SentenceTransformer(nn.Sequential):
 
                 features, labels = batch_to_device(data, self.device)
                 loss_value = loss_model(features, labels)
+
+                if gradient_accumulation_steps > 1:
+                    loss = loss / gradient_accumulation_steps
 
                 if fp16:
                     with amp.scale_loss(loss_value, optimizer) as scaled_loss:
