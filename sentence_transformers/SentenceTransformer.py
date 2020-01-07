@@ -372,8 +372,8 @@ class SentenceTransformer(nn.Sequential):
                         loss_model.zero_grad()
                         loss_model.train()
 
-                if save_epoch:
-                    self.save(output_path)
+            if save_epoch:
+                self.save(output_path)
 
             self._eval_during_training(evaluator, output_path, save_best_model, epoch, -1)
 
