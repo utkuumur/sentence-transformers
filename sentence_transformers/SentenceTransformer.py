@@ -380,7 +380,7 @@ class SentenceTransformer(nn.Sequential):
                         loss_model.train()
 
             if save_epoch:
-                self.save(output_path+ "_"+epoch)
+                self.save(output_path+ "_"+str(epoch))
 
             self._eval_during_training(evaluator, output_path, save_best_model, epoch, -1)
 
