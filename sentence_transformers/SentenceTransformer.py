@@ -356,7 +356,7 @@ class SentenceTransformer(nn.Sequential):
                 loss_value = loss_model(features, labels)
 
                 if gradient_accumulation_steps > 1:
-                    loss = loss / gradient_accumulation_steps
+                    loss_value = loss_value / gradient_accumulation_steps
 
                 if fp16:
                     with amp.scale_loss(loss_value, optimizer) as scaled_loss:
