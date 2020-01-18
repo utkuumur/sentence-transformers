@@ -9,10 +9,13 @@ from zipfile import ZipFile
 import numpy as np
 import transformers
 import torch
+import torch.distributed
 from numpy import ndarray
 from torch import nn, Tensor
 from torch.optim import Optimizer
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
+
 from tqdm import tqdm, trange
 
 from . import __DOWNLOAD_SERVER__
@@ -324,6 +327,13 @@ class SentenceTransformer(nn.Sequential):
                 model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=fp16_opt_level)
                 loss_models[idx] = model
                 optimizers[idx] = optimizer
+
+
+        # Setup Distributed Training
+        if local_rank != -1:
+            torch.cuda.set_device(local_rank)
+            device = torch.device("cuda", local_rank)
+            torch.distributed.init_process_group(backend="nccl")
 
         global_step = 0
         data_iterators = [iter(dataloader) for dataloader in dataloaders]
