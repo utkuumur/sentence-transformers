@@ -91,6 +91,9 @@ class SentenceTransformer(nn.Sequential):
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logging.info("Use pytorch device: {}".format(device))
         self.device = torch.device(device)
+
+        if torch.cuda.device_count() > 1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
         self.to(device)
 
     def encode(self, sentences: List[str], batch_size: int = 8, show_progress_bar: bool = None) -> List[ndarray]:
@@ -327,6 +330,8 @@ class SentenceTransformer(nn.Sequential):
                 model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=fp16_opt_level)
                 loss_models[idx] = model
                 optimizers[idx] = optimizer
+
+
 
 
         # Setup Distributed Training
