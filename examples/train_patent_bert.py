@@ -115,9 +115,9 @@ def train(args, train_dataset, model, train_loss):
     loss_models = [nn.DataParallel(loss) for _, loss in train_objectives]
     logging.info('number of models is {} '.format(len(loss_models)))
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     for loss_model in loss_models:
-        loss_model.to(device)
+        loss_model.to(args.device)
 
     model.best_score = -9999
 
@@ -181,7 +181,7 @@ def train(args, train_dataset, model, train_loss):
     global_step = 0
     data_iterators = [iter(dataloader) for dataloader in dataloaders]
     num_train_objectives = len(train_objectives)
-    set_seeds(1,args)
+    # set_seeds(1,args)
     tr_loss = 0.0
     for epoch in trange(epochs, desc="Epoch", disable=args.local_rank not in [-1, 0]):
         training_steps = 0
