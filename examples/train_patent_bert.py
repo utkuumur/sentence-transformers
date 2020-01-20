@@ -303,6 +303,7 @@ def main():
 
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1:
+        logger.warning("Non dist training")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         args.n_gpu = torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
@@ -336,7 +337,7 @@ def main():
                                    pooling_mode_cls_token=False,
                                    pooling_mode_max_tokens=False)
 
-    model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+    model = SentenceTransformer(modules=[word_embedding_model, pooling_model], device=args.device)
     train_loss = losses.CosineSimilarityLoss(model=model)
     model.to(args.device)
     train_loss.to(args.device)
