@@ -359,7 +359,7 @@ def main():
         logger.warning("Read Patent Training dataset")
         train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
         tr_loss = train(args, train_data, model, train_loss)
-        logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+        logger.info(" average loss = %s", tr_loss)
 
 
 def load_and_cache_examples(args, sts_reader, batch_size, model, max_example = 17714, evaluate=False):
