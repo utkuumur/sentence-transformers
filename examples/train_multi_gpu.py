@@ -152,13 +152,15 @@ local_rank = -1
 save_epoch = True
 
 device =  model.device
-model = MyDataParallel(model)
 
 dataloaders = [dataloader for dataloader, _ in train_objectives]
 
 # Use smart batching
 for dataloader in dataloaders:
     dataloader.collate_fn = model.smart_batching_collate
+
+
+
 
 loss_models = [loss for _, loss in train_objectives]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -197,12 +199,15 @@ if fp16:
         raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
     for idx in range(len(loss_models)):
-        model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=fp16_opt_level)
+        model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level='01')
         loss_models[idx] = model
         optimizers[idx] = optimizer
 
 global_step = 0
 data_iterators = [iter(dataloader) for dataloader in dataloaders]
+
+model = MyDataParallel(model)
+model.to(device)
 
 num_train_objectives = len(train_objectives)
 for epoch in trange(epochs, desc="Epoch"):
