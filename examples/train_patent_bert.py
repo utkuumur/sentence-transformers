@@ -167,7 +167,7 @@ def train(args, train_dataset, model, train_loss):
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Num examples = %d", len(train_dataset))
-    logger.info("  Num Epochs = %d", args.epoch)
+    logger.info("  Num Epochs = %d", args.epochs)
     logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
     logger.info(
         "  Total train batch size (w. parallel, distributed & accumulation) = %d",
