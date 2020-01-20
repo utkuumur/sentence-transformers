@@ -1,30 +1,31 @@
-import os
 import sys
+import csv
+import os
+import math
+import logging
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from tqdm import tqdm, trange
+
+
+import transformers
+from sentence_transformers.util import batch_to_device
+from sentence_transformers.readers import InputExample
+from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
+
 
 
 
 scratch_folder = sys.argv[1]
 source_folder = sys.argv[2]
 
-print(sys.argv)
-print(sys.path)
 if not '{}/sentence-transformers'.format(source_folder) in sys.path:
   sys.path += ['{}/sentence-transformers'.format(source_folder)]
 if not source_folder in sys.path:
   sys.path += [source_folder]
 
-
-print(sys.path)
-
-from sentence_transformers.util import batch_to_device
-from sentence_transformers.readers import InputExample
-import csv
-import os
-
-import torch.nn as nn
-class MyDataParallel(nn.DataParallel):
-    def __getattr__(self, name):
-        return getattr(self.module, name)
 
 
 class PatentDataReader:
@@ -72,14 +73,6 @@ class PatentDataReader:
         return examples
 
 
-from torch.utils.data import DataLoader
-import math
-from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
-from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
-from sentence_transformers import readers
-import logging
-from datetime import datetime
-
 
 #### Just some code to print debug information to stdout
 logging.basicConfig(format='%(asctime)s - %(message)s',
@@ -89,30 +82,30 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 #### /print debug information to stdout
 
 # Read the dataset
-train_batch_size = 8
-num_epochs = 4
+
 model_save_path = "{}/output/training_patent_bert".format(scratch_folder)
 sts_reader = PatentDataReader('{}/data'.format(source_folder), normalize_scores=True)
 
 # Use BERT for mapping tokens to embeddings
-#word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
+word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
 
 # Apply mean pooling to get one fixed sized sentence vector
-#pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
-#                               pooling_mode_mean_tokens=True,
-#                               pooling_mode_cls_token=False,
-#                               pooling_mode_max_tokens=False)
+pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
+                              pooling_mode_mean_tokens=True,
+                              pooling_mode_cls_token=False,
+                              pooling_mode_max_tokens=False)
 
-#model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-model = SentenceTransformer('{}/output/training_patent_bert'.format(source_folder))
+# model = SentenceTransformer('{}/output/training_patent_bert'.format(source_folder))
 # In[ ]:
 
-
+train_batch_size = 32
+num_epochs = 10
 test_data = SentencesDataset(examples=sts_reader.get_examples("dev.tsv",max_examples=40), model=model)
 test_dataloader = DataLoader(test_data, shuffle=False, batch_size=train_batch_size)
-evaluator = EmbeddingSimilarityEvaluator(test_dataloader)
-model.evaluate(evaluator)
+# evaluator = EmbeddingSimilarityEvaluator(test_dataloader)
+# model.evaluate(evaluator)
 
 # Convert the dataset to a DataLoader ready for training
 print("Read STSbenchmark train dataset")
@@ -120,24 +113,10 @@ train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=
 train_dataloader = DataLoader(train_data, shuffle=True, batch_size=train_batch_size)
 train_loss = losses.CosineSimilarityLoss(model=model)
 
-
-# print("Read STSbenchmark dev dataset")
-# dev_data = SentencesDataset(examples=sts_reader.get_examples('dev.tsv',max_examples=1000), model=model)
-# dev_dataloader = DataLoader(dev_data, shuffle=False, batch_size=train_batch_size)
-# evaluator = EmbeddingSimilarityEvaluator(dev_dataloader)
-
-
 # Configure the training. We skip evaluation in this example
 warmup_steps = math.ceil(len(train_data)*num_epochs/train_batch_size*0.1) #10% of train data for warm-up
 print("Warmup-steps: {}".format(warmup_steps))
 
-
-
-
-
-import torch
-import transformers
-from tqdm import tqdm, trange
 train_objectives=[(train_dataloader, train_loss)]
 evaluator=None
 epochs=num_epochs
@@ -151,7 +130,7 @@ fp16 = False
 local_rank = -1
 save_epoch = True
 
-device =  model.device
+device = model.device
 
 dataloaders = [dataloader for dataloader, _ in train_objectives]
 
@@ -169,7 +148,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 for loss_model in loss_models:
     loss_model.to(device)
 
-model.best_score = -9999
 
 min_batch_size = min([len(dataloader) for dataloader in dataloaders])
 num_train_steps = int(min_batch_size * epochs)
@@ -194,16 +172,6 @@ for loss_model in loss_models:
     optimizers.append(optimizer)
     schedulers.append(scheduler)
 
-if fp16:
-    try:
-        from apex import amp
-    except ImportError:
-        raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-
-    for idx in range(len(loss_models)):
-        model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level='01')
-        loss_models[idx] = model
-        optimizers[idx] = optimizer
 
 global_step = 0
 data_iterators = [iter(dataloader) for dataloader in dataloaders]
@@ -238,16 +206,6 @@ for epoch in trange(epochs, desc="Epoch"):
         features, labels = batch_to_device(data, device)
         loss_value = loss_model(features, labels)
 
-        if gradient_accumulation_steps > 1:
-            loss_value = loss_value / gradient_accumulation_steps
-
-        if fp16:
-            with amp.scale_loss(loss_value, optimizer) as scaled_loss:
-                scaled_loss.backward()
-            torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
-        else:
-            loss_value.backward()
-            torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
 
         training_steps += 1
 
