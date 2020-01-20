@@ -206,7 +206,7 @@ def train(args, train_dataset, model, train_loss):
                 data_iterators[idx] = data_iterator
                 data = next(data_iterator)
 
-            features, labels = batch_to_device(data, device)
+            features, labels = batch_to_device(data, args.device)
             loss_value = loss_model(features, labels)
 
             if fp16:
