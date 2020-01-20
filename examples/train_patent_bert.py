@@ -158,9 +158,9 @@ def train(args, train_dataset, model, train_loss):
 
         # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        # model = torch.nn.parallel.DistributedDataParallel(
-        #     model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
-        # )
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
+        )
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
 
@@ -208,6 +208,8 @@ def train(args, train_dataset, model, train_loss):
 
             features, labels = batch_to_device(data, args.device)
             loss_value = loss_model(features, labels)
+            logger.info("loss szie %s ", str(len(loss_value)))
+            logger.info("loss, %", str(loss_value))
 
             if fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
