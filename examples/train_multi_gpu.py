@@ -151,6 +151,9 @@ fp16 = False
 local_rank = -1
 save_epoch = True
 
+device =  model.device
+model = MyDataParallel(model)
+
 dataloaders = [dataloader for dataloader, _ in train_objectives]
 
 # Use smart batching
@@ -225,7 +228,7 @@ for epoch in trange(epochs, desc="Epoch"):
             data_iterators[idx] = data_iterator
             data = next(data_iterator)
 
-        features, labels = batch_to_device(data, model.device)
+        features, labels = batch_to_device(data, device)
         loss_value = loss_model(features, labels)
 
         if gradient_accumulation_steps > 1:
