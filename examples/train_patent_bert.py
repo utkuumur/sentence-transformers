@@ -161,7 +161,7 @@ def train(args, train_dataset, model, train_loss):
         # model = torch.nn.parallel.DistributedDataParallel(
         #     model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
         # )
-        for idx, loss_model in loss_models:
+        for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
 
     # Train!
@@ -358,7 +358,7 @@ def main():
     if args.do_train:
         logger.warning("Read Patent Training dataset")
         train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
-        global_step, tr_loss = train(args, train_data, model, train_loss)
+        tr_loss = train(args, train_data, model, train_loss)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
 
