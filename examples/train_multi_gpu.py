@@ -10,13 +10,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm, trange
 
 
-import transformers
-from sentence_transformers.util import batch_to_device
-from sentence_transformers.readers import InputExample
-from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
-
-
-
 
 scratch_folder = sys.argv[1]
 source_folder = sys.argv[2]
@@ -25,6 +18,13 @@ if not '{}/sentence-transformers'.format(source_folder) in sys.path:
   sys.path += ['{}/sentence-transformers'.format(source_folder)]
 if not source_folder in sys.path:
   sys.path += [source_folder]
+
+
+
+import transformers
+from sentence_transformers.util import batch_to_device
+from sentence_transformers.readers import InputExample
+from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
 
 
 
@@ -205,6 +205,10 @@ for epoch in trange(epochs, desc="Epoch"):
 
         features, labels = batch_to_device(data, device)
         loss_value = loss_model(features, labels)
+
+
+        loss_value.mean().backward()
+        torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
 
 
         training_steps += 1
