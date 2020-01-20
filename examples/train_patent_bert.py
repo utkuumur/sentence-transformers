@@ -14,7 +14,8 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-
+if not '/scratch/patentBert/sentence-transformers' in sys.path:
+      sys.path += ['/scratch/patentBert/sentence-transformers']
 
 import transformers
 from sentence_transformers.util import batch_to_device
@@ -96,7 +97,7 @@ def train(args, train_dataset, model, train_loss):
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=False)
 
     train_objectives = [(train_dataloader, train_loss)]
-    epochs = args.num_epochs
+    epochs = args.epochs
     evaluation_steps = 1000
     output_path = args.output_dir
     optimizer_class = transformers.AdamW
@@ -122,7 +123,7 @@ def train(args, train_dataset, model, train_loss):
 
     min_batch_size = min([len(dataloader) for dataloader in dataloaders])
     num_train_steps = int(min_batch_size * epochs)
-    warmup_steps = math.ceil(len(train_dataset) * args.num_epochs / args.train_batch_size * 0.1)  # 10% of train data for warm-up
+    warmup_steps = math.ceil(len(train_dataset) * args.epochs / args.train_batch_size * 0.1)  # 10% of train data for warm-up
     # Prepare optimizers
     optimizers = []
     schedulers = []
@@ -301,8 +302,8 @@ def main():
 
 
     # Setup CUDA, GPU & distributed training
-    if args.local_rank == -1 or args.no_cuda:
-        device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    if args.local_rank == -1:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         args.n_gpu = torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         logger.warning("Dist training local rank %s", args.local_rank)
