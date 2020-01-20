@@ -16,16 +16,6 @@ from tqdm import tqdm, trange
 
 
 
-scratch_folder = sys.argv[1]
-source_folder = sys.argv[2]
-
-if not '{}/sentence-transformers'.format(source_folder) in sys.path:
-  sys.path += ['{}/sentence-transformers'.format(source_folder)]
-if not source_folder in sys.path:
-  sys.path += [source_folder]
-
-
-
 import transformers
 from sentence_transformers.util import batch_to_device
 from sentence_transformers.readers import InputExample
@@ -101,19 +91,14 @@ def set_seeds(args,seed):
         torch.cuda.manual_seed_all(args.seed)
 
 def train(args, train_dataset, model, train_loss):
-
-
-
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=False)
 
     train_objectives = [(train_dataloader, train_loss)]
-    evaluator = None
     epochs = args.num_epochs
     evaluation_steps = 1000
-    output_path = args.model_save_path
-    gradient_accumulation_steps = 4
+    output_path = args.output_dir
     optimizer_class = transformers.AdamW
     optimizer_params = {'lr': 2e-5, 'eps': 1e-6, 'correct_bias': False}
     max_grad_norm = 1
@@ -370,7 +355,7 @@ def main():
 
     # Training
     if args.do_train:
-        logger.warning("Read STSbenchmark train dataset")
+        logger.warning("Read Patent Training dataset")
         train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
         global_step, tr_loss = train(args, train_data, model, train_loss)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
