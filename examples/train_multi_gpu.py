@@ -1,7 +1,7 @@
 import os
 import sys
 
-from sentence_transformers.util import batch_to_device
+
 
 scratch_folder = sys.argv[1]
 source_folder = sys.argv[2]
@@ -16,7 +16,7 @@ if not source_folder in sys.path:
 
 print(sys.path)
 
-
+from sentence_transformers.util import batch_to_device
 from sentence_transformers.readers import InputExample
 import csv
 import os
@@ -89,7 +89,7 @@ logging.basicConfig(format='%(asctime)s - %(message)s',
 #### /print debug information to stdout
 
 # Read the dataset
-train_batch_size = 4
+train_batch_size = 8
 num_epochs = 4
 model_save_path = "{}/output/training_patent_bert".format(scratch_folder)
 sts_reader = PatentDataReader('{}/data'.format(source_folder), normalize_scores=True)
@@ -162,7 +162,9 @@ for dataloader in dataloaders:
 
 
 
-loss_models = [loss for _, loss in train_objectives]
+loss_models = [nn.DataParallel(loss) for _, loss in train_objectives]
+logging.info('number of models is {} '.format(len(loss_models)))
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 for loss_model in loss_models:
     loss_model.to(device)
@@ -179,7 +181,7 @@ for loss_model in loss_models:
     param_optimizer = list(loss_model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': weight_decay},
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     t_total = num_train_steps
@@ -187,7 +189,7 @@ for loss_model in loss_models:
         t_total = t_total // torch.distributed.get_world_size()
 
     optimizer = optimizer_class(optimizer_grouped_parameters, **optimizer_params)
-    scheduler = model._get_scheduler(optimizer, scheduler=scheduler, warmup_steps=warmup_steps, t_total=t_total)
+    scheduler = model._get_scheduler(optimizer, scheduler='WarmupLinear', warmup_steps=warmup_steps, t_total=t_total)
 
     optimizers.append(optimizer)
     schedulers.append(scheduler)
@@ -206,8 +208,8 @@ if fp16:
 global_step = 0
 data_iterators = [iter(dataloader) for dataloader in dataloaders]
 
-model = MyDataParallel(model)
-model.to(device)
+# model = MyDataParallel(model)
+# model.to(device)
 
 num_train_objectives = len(train_objectives)
 for epoch in trange(epochs, desc="Epoch"):
