@@ -62,6 +62,7 @@ def main():
     # Required parameters
     parser.add_argument("--data_dir", default=None, type=str, required=True, help="The input data dir. Should contain the .tsv files (or other data files) for the task.",     )
     parser.add_argument("--model_dir", default=None, type=str, required=True, help="The model dir")
+    parser.add_argument("--output_dir", default=None, type=str, required=True, help="The output dir")
     parser.add_argument("--version", default=None, type=str, required=True, help="version of the model dir")
 
     args = parser.parse_args()
