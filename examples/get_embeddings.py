@@ -8,7 +8,7 @@ from sentence_transformers.readers import InputExample
 import csv
 import os
 import pickle
-
+import logging
 class PatentDataReader:
     """
     Reads in the Patent dataset. Each line contains two patent texts (s1_col_idx, s2_col_idx) and one label (score_col_idx)
@@ -66,6 +66,12 @@ def main():
     parser.add_argument("--version", default=None, type=str, required=True, help="version of the model dir")
 
     args = parser.parse_args()
+
+    #### Just some code to print debug information to stdout
+    logging.basicConfig(format='%(asctime)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        level=logging.INFO,
+                        handlers=[LoggingHandler()])
 
     model = SentenceTransformer(args.model_dir)
 
