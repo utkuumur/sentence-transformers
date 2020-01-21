@@ -158,10 +158,10 @@ def train(args, train_dataset, model, train_loss):
 
         # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
-        )
+        #
+        # model = torch.nn.parallel.DistributedDataParallel(
+        #     model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
+        # )
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
         logger.info('Setting Dist Paralel rank:{}'.format(args.local_rank))
@@ -214,7 +214,7 @@ def train(args, train_dataset, model, train_loss):
             features, labels = batch_to_device(data, args.device)
             loss_value = loss_model(features, labels)
             # logger.info("loss size: {} ".format(str(len(loss_value))))
-            logger.info("loss: ", loss_value)
+            # logger.info("loss: ", loss_value)
 
             if fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
@@ -278,10 +278,10 @@ def main():
     )
 
     parser.add_argument(
-        "--per_gpu_train_batch_size", default=8, type=int, help="Batch size per GPU/CPU for training.",
+        "--per_gpu_train_batch_size", default=4, type=int, help="Batch size per GPU/CPU for training.",
     )
     parser.add_argument(
-        "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
+        "--per_gpu_eval_batch_size", default=4, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
