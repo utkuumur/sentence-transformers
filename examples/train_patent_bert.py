@@ -236,7 +236,7 @@ def train(args, train_dataset, model, train_loss):
         if args.local_rank in [-1, 0] and save_epoch:
             model.save(output_path + "_" + str(epoch))
 
-        return tr_loss / global_step
+    return tr_loss / global_step
 
 
 def main():
