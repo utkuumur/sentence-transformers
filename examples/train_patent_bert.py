@@ -112,7 +112,7 @@ def train(args, train_dataset, model, train_loss):
     for dataloader in dataloaders:
         dataloader.collate_fn = model.smart_batching_collate
 
-    loss_models = [nn.DataParallel(loss) for _, loss in train_objectives]
+    loss_models = [loss for _, loss in train_objectives]
     logging.info('number of models is {} '.format(len(loss_models)))
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -158,11 +158,16 @@ def train(args, train_dataset, model, train_loss):
 
         # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
+
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
         )
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+        logger.info('Setting Dist Paralel rank:{}'.format(args.local_rank))
+        torch.distributed.barrier()
+
+
 
     # Train!
     logger.info("***** Running training *****")
@@ -208,8 +213,8 @@ def train(args, train_dataset, model, train_loss):
 
             features, labels = batch_to_device(data, args.device)
             loss_value = loss_model(features, labels)
-            logger.info("loss szie %s ", str(len(loss_value)))
-            logger.info("loss, %", str(loss_value))
+            logger.info("loss size: {} ".format(str(len(loss_value))))
+            logger.info("loss: {}".format(str(loss_value)))
 
             if fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
@@ -319,11 +324,11 @@ def main():
 
 
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
+        "Process rank: {}, device: {}, n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         args.local_rank,
         device,
         args.n_gpu,
-        bool(args.local_rank != -1),
+        bool(args.local_rank != -1))
     )
 
 
@@ -360,12 +365,13 @@ def main():
     # Training
     if args.do_train:
         logger.warning("Read Patent Training dataset")
-        train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
+        train_data = load_and_cache_examples(args, patent_reader, model)
+        # train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
         tr_loss = train(args, train_data, model, train_loss)
         logger.info(" average loss = %s", tr_loss)
 
 
-def load_and_cache_examples(args, sts_reader, batch_size, model, max_example = 17714, evaluate=False):
+def load_and_cache_examples(args, sts_reader, model, max_example = 17714, evaluate=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
