@@ -327,8 +327,7 @@ def main():
         "Process rank: {}, device: {}, n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
         args.local_rank,
         device,
-        args.n_gpu,
-        bool(args.local_rank != -1))
+        args.n_gpu)
     )
 
 
