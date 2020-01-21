@@ -324,7 +324,7 @@ def main():
 
 
     logger.warning(
-        "Process rank: {}, device: {}, n_gpu: {}, distributed training: {}, 16-bits training: {}".format(
+        "Process rank: {}, device: {}, n_gpu: {}".format(
         args.local_rank,
         device,
         args.n_gpu)
