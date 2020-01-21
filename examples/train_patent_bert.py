@@ -213,8 +213,8 @@ def train(args, train_dataset, model, train_loss):
 
             features, labels = batch_to_device(data, args.device)
             loss_value = loss_model(features, labels)
-            logger.info("loss size: {} ".format(str(len(loss_value))))
-            logger.info("loss: {}".format(str(loss_value)))
+            # logger.info("loss size: {} ".format(str(len(loss_value))))
+            logger.info("loss: ", loss_value)
 
             if fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
