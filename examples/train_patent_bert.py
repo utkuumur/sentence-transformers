@@ -283,6 +283,10 @@ def main():
     parser.add_argument(
         "--per_gpu_eval_batch_size", default=4, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
+
+    parser.add_argument(
+        "--max_example", default=0, type=int, help="Number of example to be trained on.",
+    )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
@@ -370,7 +374,7 @@ def main():
         logger.info(" average loss = %s", tr_loss)
 
 
-def load_and_cache_examples(args, sts_reader, model, max_example = 17714, evaluate=False):
+def load_and_cache_examples(args, sts_reader, model, evaluate=False):
     if args.local_rank not in [-1, 0] and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
@@ -389,7 +393,7 @@ def load_and_cache_examples(args, sts_reader, model, max_example = 17714, evalua
         train_data = torch.load(cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=max_example), model)
+        train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model)
         logger.info("Data size size is %s", str(len(train_data)))
 
         if args.local_rank in [-1, 0]:
