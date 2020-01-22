@@ -98,8 +98,8 @@ if params.is_slurm_job:
         params.node_id = int(os.environ['SLURM_NODEID'])
 
         # local rank on the current node / global rank
-        params.local_rank = int(os.environ['SLURM_LOCALID'])
-        params.global_rank = int(os.environ['SLURM_PROCID'])
+        params.global_rank = params.local_rank
+        params.local_rank = int(os.environ['SLURM_LOCALID']) % 4
 
         # number of processes / GPUs per node
         params.world_size = int(os.environ['SLURM_NTASKS'])
@@ -131,6 +131,7 @@ params.multi_node = params.n_nodes > 1
 params.multi_gpu = params.world_size > 1
 
 # summary
+print("\n\n")
 PREFIX = "%i - " % params.global_rank
 print(PREFIX + "Number of nodes: %i" % params.n_nodes)
 print(PREFIX + "Node ID        : %i" % params.node_id)
