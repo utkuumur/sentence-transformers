@@ -406,7 +406,7 @@ def main():
 
 
 def load_and_cache_examples(args, sts_reader, model, evaluate=False):
-    if args.local_rank not in [-1, 0] and not evaluate:
+    if not args.is_master:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     cached_features_file = os.path.join(
@@ -427,11 +427,11 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model)
         logger.info("Data size size is %s", str(len(train_data)))
 
-        if args.local_rank in [-1, 0]:
+        if args.is_master:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(train_data, cached_features_file)
 
-    if args.local_rank == 0 and not evaluate:
+    if args.is_master:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     return train_data
