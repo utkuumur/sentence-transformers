@@ -5,7 +5,7 @@ import os
 import math
 import logging
 import random
-
+import subprocess
 import numpy as np
 
 import torch
@@ -289,6 +289,10 @@ def main():
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
+    parser.add_argument("--master_port", type=int, default=-1,
+                        help="Master port (for multi-node SLURM jobs)")
+
+
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
 
@@ -310,6 +314,33 @@ def main():
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
     args.world_size = args.gpus * args.nodes
+    args.is_slurm_job = 'SLURM_JOB_ID' in os.environ
+    if args.is_slurm_job:
+        SLURM_VARIABLES = [
+            'SLURM_JOB_ID',
+            'SLURM_JOB_NODELIST', 'SLURM_JOB_NUM_NODES', 'SLURM_NTASKS', 'SLURM_TASKS_PER_NODE',
+            'SLURM_MEM_PER_NODE', 'SLURM_MEM_PER_CPU',
+            'SLURM_NODEID', 'SLURM_PROCID', 'SLURM_LOCALID', 'SLURM_TASK_PID'
+        ]
+
+        args.n_nodes = int(os.environ['SLURM_JOB_NUM_NODES'])
+        args.node_id = int(os.environ['SLURM_NODEID'])
+        args.local_rank = int(os.environ['SLURM_LOCALID'])
+        args.global_rank = int(os.environ['SLURM_PROCID'])
+
+        # number of processes / GPUs per node
+        args.world_size = int(os.environ['SLURM_NTASKS'])
+        args.n_gpu_per_node = args.world_size // args.n_nodes
+
+        # define master address and master port
+        hostnames = subprocess.check_output(['scontrol', 'show', 'hostnames', os.environ['SLURM_JOB_NODELIST']])
+        args.master_addr = hostnames.split()[0].decode('utf-8')
+        os.environ['MASTER_ADDR'] = args.master_addr
+        os.environ['MASTER_PORT'] = str(args.master_port)
+        os.environ['WORLD_SIZE'] = str(args.world_size)
+        os.environ['RANK'] = str(args.global_rank)
+        args.is_master = args.node_id == 0 and args.local_rank == 0
+
 
 
     # Setup CUDA, GPU & distributed training
@@ -321,7 +352,7 @@ def main():
         logger.warning("Dist training local rank %s", args.local_rank)
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl",timeout=datetime.timedelta(hours=10))
+        torch.distributed.init_process_group(backend="nccl",timeout=datetime.timedelta(hours=10), init_method='env://',)
         args.n_gpu = 1
     args.device = device
 
