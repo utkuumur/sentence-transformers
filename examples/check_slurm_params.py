@@ -73,9 +73,10 @@ params = parser.parse_args()
 
 params.is_slurm_job = 'SLURM_JOB_ID' in os.environ
 print("SLURM job: %s" % str(params.is_slurm_job))
+print("local rank: %s" % str(params.local_rank))
 if params.is_slurm_job:
 
-        assert params.local_rank == -1   # on the cluster, this is handled by SLURM
+        # assert params.local_rank == -1   # on the cluster, this is handled by SLURM
 
         SLURM_VARIABLES = [
             'SLURM_JOB_ID',
