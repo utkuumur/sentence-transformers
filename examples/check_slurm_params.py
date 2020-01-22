@@ -108,6 +108,7 @@ if params.is_slurm_job:
         # define master address and master port
         hostnames = subprocess.check_output(['scontrol', 'show', 'hostnames', os.environ['SLURM_JOB_NODELIST']])
         params.master_addr = hostnames.split()[0].decode('utf-8')
+        # print("Master add")
         assert 10001 <= params.master_port <= 20000 or params.world_size == 1
         print(PREFIX + "Master address: %s" % params.master_addr)
         print(PREFIX + "Master port   : %i" % params.master_port)
@@ -118,3 +119,26 @@ if params.is_slurm_job:
         os.environ['WORLD_SIZE'] = str(params.world_size)
         os.environ['RANK'] = str(params.global_rank)
 
+
+# sanity checks
+assert params.n_nodes >= 1
+assert 0 <= params.node_id < params.n_nodes
+assert 0 <= params.local_rank <= params.global_rank < params.world_size
+assert params.world_size == params.n_nodes * params.n_gpu_per_node
+
+params.is_master = params.node_id == 0 and params.local_rank == 0
+params.multi_node = params.n_nodes > 1
+params.multi_gpu = params.world_size > 1
+
+# summary
+PREFIX = "%i - " % params.global_rank
+print(PREFIX + "Number of nodes: %i" % params.n_nodes)
+print(PREFIX + "Node ID        : %i" % params.node_id)
+print(PREFIX + "Local rank     : %i" % params.local_rank)
+print(PREFIX + "Global rank    : %i" % params.global_rank)
+print(PREFIX + "World size     : %i" % params.world_size)
+print(PREFIX + "GPUs per node  : %i" % params.n_gpu_per_node)
+print(PREFIX + "Master         : %s" % str(params.is_master))
+print(PREFIX + "Multi-node     : %s" % str(params.multi_node))
+print(PREFIX + "Multi-GPU      : %s" % str(params.multi_gpu))
+print(PREFIX + "Hostname       : %s" % socket.gethostname())
