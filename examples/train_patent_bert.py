@@ -321,7 +321,7 @@ def main():
         logger.warning("Dist training local rank %s", args.local_rank)
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl")
+        torch.distributed.init_process_group(backend="nccl",timeout=36000)
         args.n_gpu = 1
     args.device = device
 
