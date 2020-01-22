@@ -7,6 +7,7 @@ import signal
 import subprocess
 import argparse
 
+
 def get_parser():
     """
     Generate a parameters parser.
@@ -31,13 +32,12 @@ def get_parser():
     parser.add_argument("--src_lang", type=str, default="", help="Source language")
     parser.add_argument("--tgt_lang", type=str, default="", help="Target language")
 
-
     parser.add_argument(
         "--max_seq_length",
         default=510,
         type=int,
         help="The maximum total input sequence length after tokenization. Sequences longer "
-        "than this will be truncated, sequences shorter will be padded.",
+             "than this will be truncated, sequences shorter will be padded.",
     )
 
     parser.add_argument(
@@ -65,67 +65,68 @@ def get_parser():
                         metavar='N',
                         help='number of total epochs to run')
 
-
     return parser
+
 
 parser = get_parser()
 params = parser.parse_args()
 
 params.is_slurm_job = 'SLURM_JOB_ID' in os.environ
-print("SLURM job: %s" % str(params.is_slurm_job))
-print("local rank: %s" % str(params.local_rank))
+# print("SLURM job: %s" % str(params.is_slurm_job))
+# print("local rank: %s" % str(params.local_rank))
 if params.is_slurm_job:
 
-        # assert params.local_rank == -1   # on the cluster, this is handled by SLURM
+    # assert params.local_rank == -1   # on the cluster, this is handled by SLURM
 
-        SLURM_VARIABLES = [
-            'SLURM_JOB_ID',
-            'SLURM_JOB_NODELIST', 'SLURM_JOB_NUM_NODES', 'SLURM_NTASKS', 'SLURM_TASKS_PER_NODE',
-            'SLURM_MEM_PER_NODE', 'SLURM_MEM_PER_CPU',
-            'SLURM_NODEID', 'SLURM_PROCID', 'SLURM_LOCALID', 'SLURM_TASK_PID'
-        ]
+    SLURM_VARIABLES = [
+        'SLURM_JOB_ID',
+        'SLURM_JOB_NODELIST', 'SLURM_JOB_NUM_NODES', 'SLURM_NTASKS', 'SLURM_TASKS_PER_NODE',
+        'SLURM_MEM_PER_NODE', 'SLURM_MEM_PER_CPU',
+        'SLURM_NODEID', 'SLURM_PROCID', 'SLURM_LOCALID', 'SLURM_TASK_PID'
+    ]
 
-        PREFIX = "%i - " % int(os.environ['SLURM_PROCID'])
-        for name in SLURM_VARIABLES:
-            value = os.environ.get(name, None)
-            print(PREFIX + "%s: %s" % (name, str(value)))
+    PREFIX = "%i - " % int(os.environ['SLURM_PROCID'])
+    for name in SLURM_VARIABLES:
+        value = os.environ.get(name, None)
+        # print(PREFIX + "%s: %s" % (name, str(value)))
 
-        # # job ID
-        # params.job_id = os.environ['SLURM_JOB_ID']
+    # # job ID
+    # params.job_id = os.environ['SLURM_JOB_ID']
 
-        # number of nodes / node ID
-        params.n_nodes = int(os.environ['SLURM_JOB_NUM_NODES'])
-        params.node_id = int(os.environ['SLURM_NODEID'])
+    # number of nodes / node ID
+    params.n_nodes = int(os.environ['SLURM_JOB_NUM_NODES'])
+    params.node_id = int(os.environ['SLURM_NODEID'])
 
-        # local rank on the current node / global rank
-        params.global_rank = params.local_rank
-        params.local_rank = int(os.environ['SLURM_LOCALID']) % 4
+    # local rank on the current node / global rank
 
-        # number of processes / GPUs per node
-        params.world_size = int(os.environ['SLURM_NTASKS'])
-        params.n_gpu_per_node = params.world_size // params.n_nodes
+    params.local_rank = int(os.environ['SLURM_LOCALID'])
+    params.global_rank = int(os.environ['SLURM_PROCID'])
 
-        # define master address and master port
-        hostnames = subprocess.check_output(['scontrol', 'show', 'hostnames', os.environ['SLURM_JOB_NODELIST']])
-        params.master_addr = hostnames.split()[0].decode('utf-8')
-        # print("Master add")
-        assert 10001 <= params.master_port <= 20000 or params.world_size == 1
-        print(PREFIX + "Master address: %s" % params.master_addr)
-        print(PREFIX + "Master port   : %i" % params.master_port)
+    # number of processes / GPUs per node
+    params.world_size = int(os.environ['SLURM_NTASKS'])
+    params.n_gpu_per_node = params.world_size // params.n_nodes
 
-        # set environment variables for 'env://'
-        os.environ['MASTER_ADDR'] = params.master_addr
-        os.environ['MASTER_PORT'] = str(params.master_port)
-        os.environ['WORLD_SIZE'] = str(params.world_size)
-        os.environ['RANK'] = str(params.global_rank)
+    # define master address and master port
+    hostnames = subprocess.check_output(['scontrol', 'show', 'hostnames', os.environ['SLURM_JOB_NODELIST']])
+    params.master_addr = hostnames.split()[0].decode('utf-8')
+    # print("Master add")
+    assert 10001 <= params.master_port <= 20000 or params.world_size == 1
+    #        print(PREFIX + "Master address: %s" % params.master_addr)
+    #        print(PREFIX + "Master port   : %i" % params.master_port)
 
+    # set environment variables for 'env://'
+    os.environ['MASTER_ADDR'] = params.master_addr
+    os.environ['MASTER_PORT'] = str(params.master_port)
+    os.environ['WORLD_SIZE'] = str(params.world_size)
+    os.environ['RANK'] = str(params.global_rank)
 
 # sanity checks
+'''
 assert params.n_nodes >= 1
 assert 0 <= params.node_id < params.n_nodes
 assert 0 <= params.local_rank <= params.global_rank < params.world_size
 assert params.world_size == params.n_nodes * params.n_gpu_per_node
-
+'''
 params.is_master = params.node_id == 0 and params.local_rank == 0
 params.multi_node = params.n_nodes > 1
 params.multi_gpu = params.world_size > 1
