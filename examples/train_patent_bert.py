@@ -14,8 +14,8 @@ from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-if not '/scratch/patentBert/sentence-transformers' in sys.path:
-      sys.path += ['/scratch/patentBert/sentence-transformers']
+if not '/home/caskurlu/patentBert_parallel/sentence-transformers' in sys.path:
+      sys.path += ['/home/caskurlu/patentBert_parallel/sentence-transformers']
 
 import transformers
 from sentence_transformers.util import batch_to_device
