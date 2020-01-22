@@ -17,6 +17,8 @@ from tqdm import tqdm, trange
 if not '/home/caskurlu/patentBert_parallel/sentence-transformers' in sys.path:
       sys.path += ['/home/caskurlu/patentBert_parallel/sentence-transformers']
 
+print(sys.path)
+
 import transformers
 from sentence_transformers.util import batch_to_device
 from sentence_transformers.readers import InputExample
