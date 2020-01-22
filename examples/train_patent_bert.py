@@ -36,7 +36,7 @@ import math
 from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 from sentence_transformers import readers
-from datetime import datetime
+import datetime
 
 class PatentDataReader:
     """
@@ -321,7 +321,7 @@ def main():
         logger.warning("Dist training local rank %s", args.local_rank)
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl",timeout=36000)
+        torch.distributed.init_process_group(backend="nccl",timeout=datetime.timedelta(hours=10))
         args.n_gpu = 1
     args.device = device
 
