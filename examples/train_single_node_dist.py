@@ -276,7 +276,6 @@ def main():
     )
 
 
-    #TODO: Prepare Dataloader
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
     # model = SentenceTransformer(args.model_name_or_path)
     # Use BERT for mapping tokens to embeddings
