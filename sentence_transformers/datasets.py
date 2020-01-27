@@ -10,8 +10,101 @@ import torch
 import logging
 import numpy as np
 from tqdm import tqdm
+from transformers import  BertTokenizer
 from . import SentenceTransformer
 from .readers.InputExample import InputExample
+
+from multiprocessing import Pool
+
+
+
+tokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=False)
+def tokenize_sentences(example):
+    return [tokenizer.tokenize(text) for text in example.texts]
+
+def convert_sentences(examples, thread_count=1):
+    print(f'Preparing to convert {len(examples)} examples..')
+    print(f'Spawning {15} processes..')
+    with Pool(15) as p:
+        tokenized_texts = list(tqdm(p.imap(tokenize_sentences, examples), total=len(examples)))
+
+    return tokenized_texts
+
+
+class SentenceMultiDataset(Dataset):
+    """
+        Dataset for smart batching, that is each batch is only padded to its longest sequence instead of padding all
+        sequences to the max length.
+        The SentenceBertEncoder.smart_batching_collate is required for this to work.
+        SmartBatchingDataset does *not* work without it.
+        """
+    tokens: List[List[List[str]]]
+    labels: Tensor
+
+    def __init__(self, examples: List[InputExample], model: SentenceTransformer, show_progress_bar: bool = None, thread_count = 1):
+        """
+        Create a new SentencesDataset with the tokenized texts and the labels as Tensor
+        """
+        if show_progress_bar is None:
+            show_progress_bar = (
+                        logging.getLogger().getEffectiveLevel() == logging.INFO or logging.getLogger().getEffectiveLevel() == logging.DEBUG)
+        self.show_progress_bar = show_progress_bar
+        self.model = model
+        self.thread_count = thread_count
+
+        self.convert_input_examples(examples)
+
+
+
+    def convert_input_examples(self, examples: List[InputExample]):
+        """
+        Converts input examples to a SmartBatchingDataset usable to train the model with
+        SentenceTransformer.smart_batching_collate as the collate_fn for the DataLoader
+
+        smart_batching_collate as collate_fn is required because it transforms the tokenized texts to the tensors.
+
+        :param examples:
+            the input examples for the training
+        :param model
+            the Sentence BERT model for the conversion
+        :return: a SmartBatchingDataset usable to train the model with SentenceTransformer.smart_batching_collate as the collate_fn
+            for the DataLoader
+        """
+        num_texts = len(examples[0].texts)
+        inputs = [[] for _ in range(num_texts)]
+        labels = []
+        too_long = [0] * num_texts
+        label_type = None
+        iterator = examples
+        if self.show_progress_bar:
+            iterator = tqdm(iterator, desc="Convert dataset")
+
+
+        tokenized_texts = convert_sentences(examples, thread_count=self.thread_count)
+
+        for tokenized_text in tokenized_texts:
+            for i in range(num_texts):
+                inputs[i].append(tokenized_text[i])
+
+        for example in examples:
+            labels.append(example.label)
+
+        tensor_labels = torch.tensor(labels, dtype=label_type)
+
+        logging.info("Num sentences: %d" % (len(examples)))
+        # for i in range(num_texts):
+        #     logging.info("Sentences {} longer than max_seqence_length: {}".format(i, too_long[i]))
+
+        self.tokens = inputs
+        self.labels = tensor_labels
+
+    def __getitem__(self, item):
+        return [self.tokens[i][item] for i in range(len(self.tokens))], self.labels[item]
+
+    def __len__(self):
+        return len(self.tokens[0])
+
+
 
 
 class SentencesDataset(Dataset):
