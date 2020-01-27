@@ -98,13 +98,12 @@ def train(args, train_dataset, model, train_loss):
 
     train_objectives = [(train_dataloader, train_loss)]
     epochs = args.epochs
-    evaluation_steps = 1000
+    # evaluation_steps = 1000
     output_path = args.output_dir
     optimizer_class = transformers.AdamW
     optimizer_params = {'lr': 2e-5, 'eps': 1e-6, 'correct_bias': False}
     max_grad_norm = 1
-    fp16 = False
-    local_rank = -1
+    # local_rank = -1
     save_epoch = True
 
     dataloaders = [dataloader for dataloader, _ in train_objectives]
@@ -135,7 +134,7 @@ def train(args, train_dataset, model, train_loss):
             {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         t_total = num_train_steps
-        if local_rank != -1:
+        if args.local_rank != -1:
             t_total = t_total // args.world_size
 
         optimizer = optimizer_class(optimizer_grouped_parameters, **optimizer_params)
@@ -145,7 +144,7 @@ def train(args, train_dataset, model, train_loss):
         optimizers.append(optimizer)
         schedulers.append(scheduler)
 
-    if fp16:
+    if args.fp16:
         try:
             from apex import amp
         except ImportError:
@@ -158,14 +157,10 @@ def train(args, train_dataset, model, train_loss):
 
         # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
-        #
-        # model = torch.nn.parallel.DistributedDataParallel(
-        #     model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
-        # )
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
         logger.info('Setting Dist Paralel rank:{}'.format(args.local_rank))
-        torch.distributed.barrier()
+        # torch.distributed.barrier()
 
 
 
@@ -216,7 +211,7 @@ def train(args, train_dataset, model, train_loss):
             # logger.info("loss size: {} ".format(str(len(loss_value))))
             # logger.info("loss: ", loss_value)
 
-            if fp16:
+            if args.fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
                     scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
@@ -226,7 +221,7 @@ def train(args, train_dataset, model, train_loss):
                 torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
 
             training_steps += 1
-            tr_loss += loss_value
+            tr_loss += loss_value.item()
 
             optimizer.step()
             scheduler.step()
@@ -267,6 +262,10 @@ def main():
     args.device = device
 
 
+    if args.local_rank not in [-1, 0]:
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
+
 
     logger.warning(
         "Process rank: {}, device: {}, n_gpu: {}".format(
@@ -274,7 +273,6 @@ def main():
         device,
         args.n_gpu)
     )
-
 
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
     # model = SentenceTransformer(args.model_name_or_path)
@@ -287,11 +285,21 @@ def main():
                                    pooling_mode_cls_token=False,
                                    pooling_mode_max_tokens=False)
 
+    if args.local_rank == 0:
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
+
     model = SentenceTransformer(modules=[word_embedding_model, pooling_model], device=args.device)
     train_loss = losses.CosineSimilarityLoss(model=model)
     model.to(args.device)
     train_loss.to(args.device)
 
+    if args.fp16:
+        try:
+            import apex
+            apex.amp.register_half_function(torch, "einsum")
+        except ImportError:
+            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
 
     logger.info("Training/evaluation parameters %s", args)
@@ -385,6 +393,18 @@ def set_parser():
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
+    parser.add_argument(
+        "--fp16",
+        action="store_true",
+        help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
+    )
+    parser.add_argument(
+        "--fp16_opt_level",
+        type=str,
+        default="O1",
+        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+             "See details at https://nvidia.github.io/apex/amp.html",
+    )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
 
