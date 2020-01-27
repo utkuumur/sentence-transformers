@@ -24,8 +24,8 @@ def tokenize_sentences(example):
 
 def convert_sentences(examples, thread_count=1):
     print(f'Preparing to convert {len(examples)} examples..')
-    print(f'Spawning {15} processes..')
-    with Pool(15) as p:
+    print(f'Spawning {thread_count} processes..')
+    with Pool(thread_count) as p:
         tokenized_texts = list(tqdm(p.imap(tokenize_sentences, examples), total=len(examples)))
 
     return tokenized_texts

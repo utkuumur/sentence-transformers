@@ -20,9 +20,7 @@ if not '/scratch/patentBert/sentence-transformers' in sys.path:
 import transformers
 from sentence_transformers.util import batch_to_device
 from sentence_transformers.readers import InputExample
-from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
-
-
+from sentence_transformers import SentenceTransformer, SentencesDataset, LoggingHandler, losses, models,  SentenceMultiDataset
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +330,7 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = torch.load(cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model)
+        train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=6)
         logger.info("Data size size is %s", str(len(train_data)))
 
         if args.local_rank in [-1, 0]:
