@@ -20,7 +20,7 @@ from multiprocessing import Pool
 
 tokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=False)
 def tokenize_sentences(example):
-    return [tokenizer.tokenize(text) for text in example.texts]
+    return [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text.lower())) for text in example.texts]
 
 def convert_sentences(examples, thread_count=1):
     print(f'Preparing to convert {len(examples)} examples..')
