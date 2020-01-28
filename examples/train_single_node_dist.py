@@ -149,7 +149,7 @@ def train(args, train_dataset, model, train_loss):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
         for idx in range(len(loss_models)):
-            model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level='01')
+            model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
             loss_models[idx] = model
             optimizers[idx] = optimizer
 
@@ -330,7 +330,7 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = torch.load(cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=6)
+        train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
         logger.info("Data size size is %s", str(len(train_data)))
 
         if args.local_rank in [-1, 0]:
@@ -413,6 +413,7 @@ def set_parser():
     parser.add_argument('--epochs', default=2, type=int,
                         metavar='N',
                         help='number of total epochs to run')
+    parser.add_argument('--n_threads', default=1, type=int, help='maximum number of threads for single process')
 
     return parser
 
