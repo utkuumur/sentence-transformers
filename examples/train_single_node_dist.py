@@ -153,7 +153,7 @@ def train(args, train_dataset, model, train_loss):
             loss_models[idx] = model
             optimizers[idx] = optimizer
 
-        # Distributed training (should be after apex fp16 initialization)
+    # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
