@@ -236,6 +236,7 @@ def main():
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
 
+    logger.info("arguments are parsed")
     args.world_size = args.gpus * args.nodes
 
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
@@ -392,3 +393,8 @@ def set_parser():
     parser.add_argument('--n_threads', default=1, type=int, help='maximum number of threads for single process')
 
     return parser
+
+
+
+if __name__ == '__main__':
+    main()
