@@ -21,3 +21,6 @@ class CosineSimilarityLoss(nn.Module):
             return loss
         else:
             return reps, output
+
+    def save(self, path):
+        self.model.save(path)

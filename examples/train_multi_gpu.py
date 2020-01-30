@@ -135,9 +135,9 @@ def train(args, train_dataset, model, train_loss):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
         for idx in range(len(loss_models)):
-            model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
-            loss_models[idx] = model
-            optimizers[idx] = optimizer
+            model2, optimizer2 = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
+            loss_models[idx] = model2
+            optimizers[idx] = optimizer2
 
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
@@ -218,6 +218,8 @@ def train(args, train_dataset, model, train_loss):
             scheduler.step()
             optimizer.zero_grad()
             global_step += 1
+
+           
 
         if args.local_rank in [-1, 0] and save_epoch:
             model.save(output_path + "_" + str(epoch))
@@ -391,6 +393,8 @@ def set_parser():
                         metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('--n_threads', default=1, type=int, help='maximum number of threads for single process')
+
+    parser.add_argument('--save_steps', default=10000, type=int)
 
     return parser
 
