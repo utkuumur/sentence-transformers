@@ -1,8 +1,8 @@
 import argparse
 import sys
 
-if not '/scratch/patentBert/sentence-transformers' in sys.path:
-      sys.path += ['/scratch/patentBert/sentence-transformers']
+if not '/home/caskurlu/patentBert/sentence-transformers' in sys.path:
+      sys.path += ['/home/caskurlu/patentBert/sentence-transformers']
 
 from sentence_transformers.readers import InputExample
 import csv
@@ -60,10 +60,11 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Required parameters
-    parser.add_argument("--data_dir", default=None, type=str, required=True, help="The input data dir. Should contain the .tsv files (or other data files) for the task.",     )
+    #parser.add_argument("--data_dir", default=None, type=str, required=True, help="The input data dir. Should contain the .tsv files (or other data files) for the task.",     )
     parser.add_argument("--model_dir", default=None, type=str, required=True, help="The model dir")
     parser.add_argument("--output_dir", default=None, type=str, required=True, help="The output dir")
     parser.add_argument("--version", default=None, type=str, required=True, help="version of the model dir")
+    parser.add_argument("--source_file", default=None, type=str, required=True, help="Path to the input data.",     )
 
     args = parser.parse_args()
 
@@ -74,7 +75,7 @@ def main():
                         handlers=[LoggingHandler()])
 
     model = SentenceTransformer(args.model_dir)
-
+    '''
     pno2abstract = pickle.load(open('{}/pno2abstract.dict'.format(args.data_dir), 'rb'))
 
     # model._first_module().max_seq_length = 256
@@ -91,23 +92,22 @@ def main():
         dct[pnos[idx]] = embeddings[idx]
 
     pickle.dump(dct, open('{}/{}_abstract_embeddings.dict'.format(args.output_dir, args.version), 'wb'))
-
-    pno2desc = pickle.load(open('{}/pno2descriptions.dict'.format(args.data_dir), 'rb'))
+    '''
+    pno2desc = pickle.load(open(args.source_file, 'rb'))
 
     # model._first_module().max_seq_length = 256
     pnos = []
     texts = []
-    items = list(pno2desc.items())
-    for pno, text in items:
+    for pno in pno2desc.keys():
         pnos.append(pno)
-        texts.append(text)
+        texts.append(pno2desc[pno])
 
     embeddings = model.encode(texts)
     dct = {}
     for idx in range(len(pnos)):
         dct[pnos[idx]] = embeddings[idx]
 
-    pickle.dump(dct, open('{}/{}_descriptions_embeddings.dict'.format(args.output_dir, args.version), 'wb'))
+    pickle.dump(dct, open('{}/pno2vec_{}.dict'.format(args.output_dir, args.version), 'wb'))
 
 if __name__ == '__main__':
     main()

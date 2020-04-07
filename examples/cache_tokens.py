@@ -4,17 +4,15 @@ import csv
 import os
 import math
 import logging
-import datetime
+import random
+
+import numpy as np
+
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-
-logger = logging.getLogger(__name__)
-csv.field_size_limit(sys.maxsize)
-
-# scratch_folder = sys.argv[1]
-# source_folder = sys.argv[2]
 
 if not '/scratch/patentBert/sentence-transformers' in sys.path:
       sys.path += ['/scratch/patentBert/sentence-transformers']
@@ -23,8 +21,20 @@ import transformers
 from sentence_transformers.util import batch_to_device
 from sentence_transformers.readers import InputExample
 from sentence_transformers import SentenceTransformer, SentencesDataset, LoggingHandler, losses, models,  SentenceMultiDataset
-from torch.utils.data.distributed import DistributedSampler
 
+logger = logging.getLogger(__name__)
+
+
+from sentence_transformers.readers import InputExample
+import csv
+import os
+
+from torch.utils.data import DataLoader
+import math
+from sentence_transformers import SentenceTransformer,  SentencesDataset, LoggingHandler, losses, models
+from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
+from sentence_transformers import readers
+import datetime
 
 class PatentDataReader:
     """
@@ -72,8 +82,12 @@ class PatentDataReader:
 
 
 
-
-
+def set_seeds(args,seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if args.n_gpu > 0:
+        torch.cuda.manual_seed_all(args.seed)
 
 def train(args, train_dataset, model, train_loss):
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -135,19 +149,16 @@ def train(args, train_dataset, model, train_loss):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
         for idx in range(len(loss_models)):
-            model2, optimizer2 = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
-            loss_models[idx] = model2
-            optimizers[idx] = optimizer2
+            model, optimizer = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
+            loss_models[idx] = model
+            optimizers[idx] = optimizer
 
-    # Distributed training (should be after apex fp16 initialization)
+        # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         for idx, loss_model in enumerate(loss_models):
             loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
         logger.info('Setting Dist Paralel rank:{}'.format(args.local_rank))
-    elif args.n_gpu > 1:
-        for idx, loss_model in enumerate(loss_models):
-            loss_models[idx] = torch.nn.parallel.DataParallel(loss_model)
-
+        # torch.distributed.barrier()
 
 
 
@@ -198,17 +209,13 @@ def train(args, train_dataset, model, train_loss):
             # logger.info("loss size: {} ".format(str(len(loss_value))))
             # logger.info("loss: ", loss_value)
 
-
-            if args.n_gpu > 1:
-                loss_value = loss_value.mean()
-
-
             if args.fp16:
                 with amp.scale_loss(loss_value, optimizer) as scaled_loss:
                     scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
             else:
                 loss_value.backward()
+                # loss_value.backward()
                 torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
 
             training_steps += 1
@@ -219,7 +226,10 @@ def train(args, train_dataset, model, train_loss):
             optimizer.zero_grad()
             global_step += 1
 
-           
+            if global_step > 2:
+                logger.info('Successfully trained for 2 batch')
+                sys.exit(0)
+
 
         if args.local_rank in [-1, 0] and save_epoch:
             model.save(output_path + "_" + str(epoch))
@@ -238,18 +248,7 @@ def main():
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
 
-    logger.info("arguments are parsed")
     args.world_size = args.gpus * args.nodes
-
-    patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
-    # Use BERT for mapping tokens to embeddings
-    word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
-
-    # Apply mean pooling to get one fixed sized sentence vector
-    pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
-                                   pooling_mode_mean_tokens=True,
-                                   pooling_mode_cls_token=False,
-                                   pooling_mode_max_tokens=False)
 
 
     # Setup CUDA, GPU & distributed training
@@ -261,11 +260,39 @@ def main():
         logger.warning("Dist training local rank %s", args.local_rank)
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
-        torch.distributed.init_process_group(backend="nccl", timeout=datetime.timedelta(hours=10))
+        torch.distributed.init_process_group(backend="nccl",timeout=datetime.timedelta(hours=10))
         args.n_gpu = 1
     args.device = device
 
-    model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+
+    if args.local_rank not in [-1, 0]:
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
+
+
+    logger.warning(
+        "Process rank: {}, device: {}, n_gpu: {}".format(
+        args.local_rank,
+        device,
+        args.n_gpu)
+    )
+
+    patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
+    # model = SentenceTransformer(args.model_name_or_path)
+    # Use BERT for mapping tokens to embeddings
+    word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
+
+    # Apply mean pooling to get one fixed sized sentence vector
+    pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
+                                   pooling_mode_mean_tokens=True,
+                                   pooling_mode_cls_token=False,
+                                   pooling_mode_max_tokens=False)
+
+    if args.local_rank == 0:
+        # Make sure only the first process in distributed training will download model & vocab
+        torch.distributed.barrier()
+
+    model = SentenceTransformer(modules=[word_embedding_model, pooling_model], device=args.device)
     train_loss = losses.CosineSimilarityLoss(model=model)
     model.to(args.device)
     train_loss.to(args.device)
@@ -277,6 +304,7 @@ def main():
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
 
+
     logger.info("Training/evaluation parameters %s", args)
 
     # Training
@@ -286,8 +314,6 @@ def main():
         # train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
         tr_loss = train(args, train_data, model, train_loss)
         logger.info(" average loss = %s", tr_loss)
-
-
 
 
 def load_and_cache_examples(args, sts_reader, model, evaluate=False):
@@ -315,6 +341,7 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(train_data, cached_features_file)
+            logger.info("Features are saved")
 
     if args.local_rank == 0 and not evaluate:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -368,7 +395,7 @@ def set_parser():
     parser.add_argument(
         "--max_example", default=0, type=int, help="Number of example to be trained on.",
     )
-    parser.add_argument("--learning_rate", default=4e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument(
         "--fp16",
@@ -392,13 +419,9 @@ def set_parser():
     parser.add_argument('--epochs', default=2, type=int,
                         metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('--n_threads', default=4, type=int, help='maximum number of threads for single process')
-
-    parser.add_argument('--save_steps', default=10000, type=int)
+    parser.add_argument('--n_threads', default=1, type=int, help='maximum number of threads for single process')
 
     return parser
-
-
 
 if __name__ == '__main__':
     main()
