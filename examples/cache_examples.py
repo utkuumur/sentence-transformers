@@ -279,10 +279,10 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
         logger.info("Data size size is %s", str(len(train_data)))
 
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(train_data, cached_features_file)
 
+        logger.info("Saving features into cached file %s", cached_features_file)
+        torch.save(train_data, cached_features_file)
+            
     
     return train_data
 
