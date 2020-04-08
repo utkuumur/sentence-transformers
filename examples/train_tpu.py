@@ -206,8 +206,9 @@ def main():
 
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
     # Use BERT for mapping tokens to embeddings
-    word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
-
+    logger.warning("Loading Bert Model")
+    word_embedding_model = models.BERT('bert-base-uncased', max_seq_length=510)
+    logger.warning("Model is loaded")
     # Apply mean pooling to get one fixed sized sentence vector
     pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
                                    pooling_mode_mean_tokens=True,
@@ -216,6 +217,7 @@ def main():
 
 
     if args.use_tpu:
+        logger.warning("TPU training")
         device = xm.xla_device()
         args.n_gpu = 1
     elif args.local_rank == -1:
@@ -240,6 +242,7 @@ def main():
     if args.do_train:
         logger.warning("Read Patent Training dataset")
         train_data = load_and_cache_examples(args, patent_reader, model)
+        logger.warning("Training dataset is loaded")
         # train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
         tr_loss = train(args, train_data, model, train_loss)
         logger.info(" average loss = %s", tr_loss)
