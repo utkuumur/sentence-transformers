@@ -263,17 +263,24 @@ def main():
 def load_and_cache_examples(args, sts_reader, model, evaluate=False):
     cached_features_file = os.path.join(
         args.data_dir,
-        "cached_{}_{}_{}_{}".format(
+        "cached_{}_{}_{}_{}_{}".format(
             "dev" if evaluate else "train",
             list(filter(None, args.model_name_or_path.split("/"))).pop(),
             str(args.max_seq_length),
             "patent",
+            args.part_no
         ),
     )
 
     if os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         train_data = torch.load(cached_features_file)
+    elif args.part_no != "":
+        logger.info("Creating features from part %s", args.part_no)
+        train_data = SentenceMultiDataset(sts_reader.get_examples('part{}.tsv'.format(args.part_no), max_examples=args.max_example), model, thread_count=args.n_threads)
+        logger.info("Data size size is %s", str(len(train_data)))
+        logger.info("Saving features into cached file %s", cached_features_file)
+        torch.save(train_data, cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
         train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
@@ -327,8 +334,9 @@ def set_parser():
         "--max_example", default=0, type=int, help="Number of example to be trained on.",
     )
 
-    parser.add_argument('--n_threads', default=4, type=int, help='maximum number of threads for single process')
 
+    parser.add_argument('--n_threads', default=4, type=int, help='maximum number of threads for single process')
+    parser.add_argument('--part_no', default="", type=str, help='part number for partitioned caching process')
     return parser
 
 
