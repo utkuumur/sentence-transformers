@@ -325,6 +325,7 @@ def set_parser():
     parser.add_argument(
         "--max_example", default=0, type=int, help="Number of example to be trained on.",
     )
+    parser.add_argument("--use_tpu", action="store_true", help="Use tpu")
     parser.add_argument("--learning_rate", default=4e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument(
