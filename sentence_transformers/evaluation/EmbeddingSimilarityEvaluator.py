@@ -7,6 +7,7 @@ from tqdm import tqdm
 from ..util import batch_to_device
 import os
 import csv
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.metrics.pairwise import paired_cosine_distances, paired_euclidean_distances, paired_manhattan_distances
 from scipy.stats import pearsonr, spearmanr
 import numpy as np
@@ -85,53 +86,7 @@ class EmbeddingSimilarityEvaluator(SentenceEvaluator):
             print(embeddings2)
             raise(e)
 
-        manhattan_distances = -paired_manhattan_distances(embeddings1, embeddings2)
-        euclidean_distances = -paired_euclidean_distances(embeddings1, embeddings2)
-        dot_products = [np.dot(emb1, emb2) for emb1, emb2 in zip(embeddings1, embeddings2)]
+        mse_cosine = mean_squared_error(labels, cosine_scores)
+        mae_cosine = mean_absolute_error(labels, cosine_scores)
 
-
-        eval_pearson_cosine, _ = pearsonr(labels, cosine_scores)
-        eval_spearman_cosine, _ = spearmanr(labels, cosine_scores)
-
-        eval_pearson_manhattan, _ = pearsonr(labels, manhattan_distances)
-        eval_spearman_manhattan, _ = spearmanr(labels, manhattan_distances)
-
-        eval_pearson_euclidean, _ = pearsonr(labels, euclidean_distances)
-        eval_spearman_euclidean, _ = spearmanr(labels, euclidean_distances)
-
-        eval_pearson_dot, _ = pearsonr(labels, dot_products)
-        eval_spearman_dot, _ = spearmanr(labels, dot_products)
-
-        logging.info("Cosine-Similarity :\tPearson: {:.4f}\tSpearman: {:.4f}".format(
-            eval_pearson_cosine, eval_spearman_cosine))
-        logging.info("Manhattan-Distance:\tPearson: {:.4f}\tSpearman: {:.4f}".format(
-            eval_pearson_manhattan, eval_spearman_manhattan))
-        logging.info("Euclidean-Distance:\tPearson: {:.4f}\tSpearman: {:.4f}".format(
-            eval_pearson_euclidean, eval_spearman_euclidean))
-        logging.info("Dot-Product-Similarity:\tPearson: {:.4f}\tSpearman: {:.4f}".format(
-            eval_pearson_dot, eval_spearman_dot))
-
-        if output_path is not None:
-            csv_path = os.path.join(output_path, self.csv_file)
-            output_file_exists = os.path.isfile(csv_path)
-            with open(csv_path, mode="a" if output_file_exists else 'w', encoding="utf-8") as f:
-                writer = csv.writer(f)
-                if not output_file_exists:
-                    writer.writerow(self.csv_headers)
-
-                writer.writerow([epoch, steps, eval_pearson_cosine, eval_spearman_cosine, eval_pearson_euclidean,
-                                 eval_spearman_euclidean, eval_pearson_manhattan, eval_spearman_manhattan, eval_pearson_dot, eval_spearman_dot])
-
-
-        if self.main_similarity == SimilarityFunction.COSINE:
-            return eval_spearman_cosine
-        elif self.main_similarity == SimilarityFunction.EUCLIDEAN:
-            return eval_spearman_euclidean
-        elif self.main_similarity == SimilarityFunction.MANHATTAN:
-            return eval_spearman_manhattan
-        elif self.main_similarity == SimilarityFunction.DOT_PRODUCT:
-            return eval_spearman_dot
-        elif self.main_similarity is None:
-            return max(eval_spearman_cosine, eval_spearman_manhattan, eval_spearman_euclidean, eval_spearman_dot)
-        else:
-            raise ValueError("Unknown main_similarity value")
+        return (mse_cosine, mae_cosine)

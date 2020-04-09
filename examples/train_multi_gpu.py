@@ -75,10 +75,13 @@ class PatentDataReader:
 
 
 
-def train(args, train_dataset, model, train_loss):
+def train(args, train_dataset, model, train_loss, dev_dataset=None):
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=False)
+
+    dev_dataloader = DataLoader(dev_dataset, shuffle=False, batch_size=args.train_batch_size)
+    evaluator = EmbeddingSimilarityEvaluator(dev_dataloader)
 
     train_objectives = [(train_dataloader, train_loss)]
     epochs = args.epochs
@@ -219,10 +222,22 @@ def train(args, train_dataset, model, train_loss):
             optimizer.zero_grad()
             global_step += 1
 
-           
+        
+        if args.evaluation_steps > 0 and training_steps % args.evaluation_steps == 0 and evaluator != None:
+            score = evaluator(model)
+            for loss_model in loss_models:
+                loss_model.zero_grad()
+                loss_model.train()
+
+            logging.info("Dev cosine-Similarity MSE:", score[0], " at step ", global_step)
+            logging.info("Dev cosine-Similarity MAE:", score[1], " at step ", global_step)
+            if args.local_rank in [-1, 0]:
+                model.save(output_path + "_step_" + str(global_step))       
+
+
 
         if args.local_rank in [-1, 0] and save_epoch:
-            model.save(output_path + "_" + str(epoch))
+            model.save(output_path + "_ep_" + str(epoch))
 
     return tr_loss / global_step
 
@@ -283,8 +298,15 @@ def main():
     if args.do_train:
         logger.warning("Read Patent Training dataset")
         train_data = load_and_cache_examples(args, patent_reader, model)
+        if args.eval_during_train:
+            logging.info("Read STSbenchmark dev dataset")
+            dev_data = load_and_cache_examples(args, patent_reader, model,evaluate=True)
+            
+        else:
+            dev_data=None
+
         # train_data = SentencesDataset(patent_reader.get_examples('train.tsv', max_examples=17714), model)
-        tr_loss = train(args, train_data, model, train_loss)
+        tr_loss = train(args, train_data, model, train_loss, dev_dataset=dev_data)
         logger.info(" average loss = %s", tr_loss)
 
 
@@ -309,7 +331,10 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = torch.load(cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
+        if evaluate:
+            train_data = SentenceMultiDataset(sts_reader.get_examples('dev.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
+        else:
+            train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
         logger.info("Data size size is %s", str(len(train_data)))
 
         if args.local_rank in [-1, 0]:
@@ -383,7 +408,9 @@ def set_parser():
              "See details at https://nvidia.github.io/apex/amp.html",
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
+    parser.add_argument("--eval_during_train", action="store_true", help="Whether to run eval on the dev set.")
+    parser.add_argument("--evaluation_steps", default=0, type=int, help="Number of steps to evaluate during training.")
+    
 
     parser.add_argument('-n', '--nodes', default=1,
                         type=int, metavar='N')
