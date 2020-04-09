@@ -13,11 +13,6 @@ from tqdm import tqdm, trange
 logger = logging.getLogger(__name__)
 csv.field_size_limit(sys.maxsize)
 
-# scratch_folder = sys.argv[1]
-# source_folder = sys.argv[2]
-
-if not '/scratch/patentBert/sentence-transformers' in sys.path:
-      sys.path += ['/scratch/patentBert/sentence-transformers']
 
 import transformers
 from sentence_transformers.util import batch_to_device
@@ -75,160 +70,6 @@ class PatentDataReader:
 
 
 
-
-
-def train(args, train_dataset, model, train_loss):
-    args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
-    train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, shuffle=False)
-
-    train_objectives = [(train_dataloader, train_loss)]
-    epochs = args.epochs
-    # evaluation_steps = 1000
-    output_path = args.output_dir
-    optimizer_class = transformers.AdamW
-    optimizer_params = {'lr': 2e-5, 'eps': 1e-6, 'correct_bias': False}
-    max_grad_norm = 1
-    # local_rank = -1
-    save_epoch = True
-
-    dataloaders = [dataloader for dataloader, _ in train_objectives]
-    # Use smart batching
-    for dataloader in dataloaders:
-        dataloader.collate_fn = model.smart_batching_collate
-
-    loss_models = [loss for _, loss in train_objectives]
-    logging.info('number of models is {} '.format(len(loss_models)))
-
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    for loss_model in loss_models:
-        loss_model.to(args.device)
-
-    model.best_score = -9999
-
-    min_batch_size = min([len(dataloader) for dataloader in dataloaders])
-    num_train_steps = int(min_batch_size * epochs)
-    warmup_steps = math.ceil(len(train_dataset) * args.epochs / args.train_batch_size * 0.1)  # 10% of train data for warm-up
-    # Prepare optimizers
-    optimizers = []
-    schedulers = []
-    for loss_model in loss_models:
-        param_optimizer = list(loss_model.named_parameters())
-        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-        t_total = num_train_steps
-        if args.local_rank != -1:
-            t_total = t_total // args.world_size
-
-        optimizer = optimizer_class(optimizer_grouped_parameters, **optimizer_params)
-        scheduler = model._get_scheduler(optimizer, scheduler='WarmupLinear', warmup_steps=warmup_steps,
-                                         t_total=t_total)
-
-        optimizers.append(optimizer)
-        schedulers.append(scheduler)
-
-    if args.fp16:
-        try:
-            from apex import amp
-        except ImportError:
-            raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-
-        for idx in range(len(loss_models)):
-            model2, optimizer2 = amp.initialize(loss_models[idx], optimizers[idx], opt_level=args.fp16_opt_level)
-            loss_models[idx] = model2
-            optimizers[idx] = optimizer2
-
-    # Distributed training (should be after apex fp16 initialization)
-    if args.local_rank != -1:
-        for idx, loss_model in enumerate(loss_models):
-            loss_models[idx] = torch.nn.parallel.DistributedDataParallel(loss_model,device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
-        logger.info('Setting Dist Paralel rank:{}'.format(args.local_rank))
-    elif args.n_gpu > 1:
-        for idx, loss_model in enumerate(loss_models):
-            loss_models[idx] = torch.nn.parallel.DataParallel(loss_model)
-
-
-
-
-    # Train!
-    logger.info("***** Running training *****")
-    logger.info("  Num examples = %d", len(train_dataset))
-    logger.info("  Num Epochs = %d", args.epochs)
-    logger.info("  Instantaneous batch size per GPU = %d", args.per_gpu_train_batch_size)
-    logger.info(
-        "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-        args.train_batch_size
-        * (torch.distributed.get_world_size() if args.local_rank != -1 else 1),
-    )
-    logger.info("  Total optimization steps = %d", t_total)
-
-
-
-    global_step = 0
-    data_iterators = [iter(dataloader) for dataloader in dataloaders]
-    num_train_objectives = len(train_objectives)
-    # set_seeds(1,args)
-    tr_loss = 0.0
-    for epoch in trange(epochs, desc="Epoch", disable=args.local_rank not in [-1, 0]):
-        training_steps = 0
-
-        for loss_model in loss_models:
-            loss_model.zero_grad()
-            loss_model.train()
-
-        for step in trange(num_train_objectives * min_batch_size, desc="Iteration", disable=args.local_rank not in [-1, 0]):
-            idx = step % num_train_objectives
-
-            loss_model = loss_models[idx]
-            optimizer = optimizers[idx]
-            scheduler = schedulers[idx]
-            data_iterator = data_iterators[idx]
-
-            try:
-                data = next(data_iterator)
-            except StopIteration:
-                logging.info("Restart data_iterator")
-                data_iterator = iter(dataloaders[idx])
-                data_iterators[idx] = data_iterator
-                data = next(data_iterator)
-
-            features, labels = batch_to_device(data, args.device)
-            loss_value = loss_model(features, labels)
-            # logger.info("loss size: {} ".format(str(len(loss_value))))
-            # logger.info("loss: ", loss_value)
-
-
-            if args.n_gpu > 1:
-                loss_value = loss_value.mean()
-
-
-            if args.fp16:
-                with amp.scale_loss(loss_value, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), max_grad_norm)
-            else:
-                loss_value.backward()
-                torch.nn.utils.clip_grad_norm_(loss_model.parameters(), max_grad_norm)
-
-            training_steps += 1
-            tr_loss += loss_value.item()
-
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad()
-            global_step += 1
-
-           
-
-        if args.local_rank in [-1, 0] and save_epoch:
-            model.save(output_path + "_" + str(epoch))
-
-    return tr_loss / global_step
-
-
 def main():
     parser = set_parser()
     args = parser.parse_args()
@@ -244,18 +85,19 @@ def main():
 
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
     # Use BERT for mapping tokens to embeddings
-    word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
+    #word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
 
     # Apply mean pooling to get one fixed sized sentence vector
-    pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
-                                   pooling_mode_mean_tokens=True,
-                                   pooling_mode_cls_token=False,
-                                   pooling_mode_max_tokens=False)
+    #pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
+    #                               pooling_mode_mean_tokens=True,
+    #                               pooling_mode_cls_token=False,
+    #                               pooling_mode_max_tokens=False)
 
 
-    model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
+    #model = SentenceTransformer(modules=[word_embedding_model, pooling_model])
 
-    train_data = load_and_cache_examples(args, patent_reader, model)
+    train_data = load_and_cache_examples(args, patent_reader, None)
+    logger.info("caching finished")
 
 
 

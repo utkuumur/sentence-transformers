@@ -18,7 +18,7 @@ from multiprocessing import Pool
 
 
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=True)
+tokenizer = BertTokenizer.from_pretrained('/home/orion/patent_stuff/models/scibert_scivocab_uncased')
 def tokenize_sentences(example):
     return [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text.lower())) for text in example.texts]
 
@@ -27,6 +27,13 @@ def convert_sentences(examples, thread_count=1):
     print(f'Spawning {thread_count} processes..')
     with Pool(thread_count) as p:
         tokenized_texts = list(tqdm(p.imap(tokenize_sentences, examples), total=len(examples)))
+
+    avg = 0
+    for token in tokenized_texts:
+        avg += len(token)
+
+    print('avg token:', (avg / len(examples)))
+
 
     return tokenized_texts
 
