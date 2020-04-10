@@ -88,7 +88,7 @@ def train(args, train_dataset, model, train_loss, dev_dataset=None):
     # evaluation_steps = 1000
     output_path = args.output_dir
     optimizer_class = transformers.AdamW
-    optimizer_params = {'lr': 2e-5, 'eps': 1e-6, 'correct_bias': False}
+    optimizer_params = {'lr': args.learning_rate, 'eps': 1e-6, 'correct_bias': False}
     max_grad_norm = 1
     # local_rank = -1
     save_epoch = True
@@ -393,7 +393,7 @@ def set_parser():
     parser.add_argument(
         "--max_example", default=0, type=int, help="Number of example to be trained on.",
     )
-    parser.add_argument("--learning_rate", default=4e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--learning_rate", default=3e-6, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument(
         "--fp16",
