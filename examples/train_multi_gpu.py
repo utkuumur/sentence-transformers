@@ -85,7 +85,7 @@ def train(args, train_dataset, model, train_loss):
     # evaluation_steps = 1000
     output_path = args.output_dir
     optimizer_class = transformers.AdamW
-    optimizer_params = {'lr': 2e-5, 'eps': 1e-6, 'correct_bias': False}
+    optimizer_params = {'lr': 3e-6, 'eps': 1e-6, 'correct_bias': False}
     max_grad_norm = 1
     # local_rank = -1
     save_epoch = True
@@ -199,6 +199,10 @@ def train(args, train_dataset, model, train_loss):
             # logger.info("loss: ", loss_value)
 
 
+            if global_step % 1000 == 0 and global_step > 0:
+                logger.info("average loss at {} = {}".format(str(global_step),str((tr_loss / global_step))))
+
+
             if args.n_gpu > 1:
                 loss_value = loss_value.mean()
 
@@ -219,10 +223,15 @@ def train(args, train_dataset, model, train_loss):
             optimizer.zero_grad()
             global_step += 1
 
+
            
+            if args.local_rank in [-1,0] and global_step > 0 and global_step % 5000 == 0:
+                model.save(output_path +'_ts_' + str(global_step * 64))
+
+        logger.info(" average loss = %s", (tr_loss / global_step))
 
         if args.local_rank in [-1, 0] and save_epoch:
-            model.save(output_path + "_" + str(epoch))
+            model.save(output_path + "_ep_" + str(epoch))
 
     return tr_loss / global_step
 
@@ -243,8 +252,8 @@ def main():
 
     patent_reader = PatentDataReader(args.data_dir, normalize_scores=True)
     # Use BERT for mapping tokens to embeddings
-    word_embedding_model = models.BERT('bert-base-cased', max_seq_length=510)
-
+    word_embedding_model = models.BERT(args.model_name_or_path, max_seq_length=args.max_seq_length, do_lower_case=True)
+    #word_embedding_model = models.XLNet(args.model_name_or_path, max_seq_length=args.max_seq_length, do_lower_case=True)
     # Apply mean pooling to get one fixed sized sentence vector
     pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension(),
                                    pooling_mode_mean_tokens=True,
@@ -309,7 +318,8 @@ def load_and_cache_examples(args, sts_reader, model, evaluate=False):
         train_data = torch.load(cached_features_file)
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
-        train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
+        #train_data = SentenceMultiDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model, thread_count=args.n_threads)
+        train_data = SentencesDataset(sts_reader.get_examples('train.tsv', max_examples=args.max_example), model)
         logger.info("Data size size is %s", str(len(train_data)))
 
         if args.local_rank in [-1, 0]:

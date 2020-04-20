@@ -18,7 +18,8 @@ from multiprocessing import Pool
 
 
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=True)
+tokenizer = BertTokenizer.from_pretrained('/home/caskurlu/patentBert/models/scibert_scivocab_uncased/', do_lower_case=True)
+#tokenizer = BertTokenizer.from_pretrained('bert-base-cased', do_lower_case=True)
 def tokenize_sentences(example):
     return [tokenizer.convert_tokens_to_ids(tokenizer.tokenize(text.lower())) for text in example.texts]
 

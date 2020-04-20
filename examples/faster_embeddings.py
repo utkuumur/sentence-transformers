@@ -80,13 +80,6 @@ def main():
     model._first_module().max_seq_length = args.max_seq_length
     pno2desc = pickle.load(open(args.source_file, 'rb'))
 
-    for pno in list(pno2desc.keys()):
-        text = pno2desc[pno]
-        if text != text:
-            del pno2desc[pno]
-
-
-
     pnos = []
     texts = []
     for pno in pno2desc.keys():
