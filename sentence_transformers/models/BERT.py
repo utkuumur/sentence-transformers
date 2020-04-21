@@ -1,6 +1,7 @@
 from torch import Tensor
 from torch import nn
 from transformers import  BertModel, BertTokenizer
+from tokenizers import BertWordPieceTokenizer
 import json
 from typing import Union, Tuple, List, Dict
 import os
@@ -24,6 +25,9 @@ class BERT(nn.Module):
 
         self.bert = BertModel.from_pretrained(model_name_or_path)
         self.tokenizer = BertTokenizer.from_pretrained(model_name_or_path, do_lower_case=do_lower_case)
+        if not model_name_or_path.endswith('/'):
+            model_name_or_path = model_name_or_path + '/'
+        self.fast_tokenizer = BertWordPieceTokenizer(model_name_or_path+'vocab.txt', lowercase=do_lower_case)
         self.cls_token_id = self.tokenizer.convert_tokens_to_ids([self.tokenizer.cls_token])[0]
         self.sep_token_id = self.tokenizer.convert_tokens_to_ids([self.tokenizer.sep_token])[0]
 
@@ -41,7 +45,8 @@ class BERT(nn.Module):
         """
         Tokenizes a text and maps tokens to token-ids
         """
-        return self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(text))
+        #return self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(text))
+        return self.fast_tokenizer.encode(text,add_special_tokens=False).ids
 
     def get_sentence_features(self, tokens: List[int], pad_seq_length: int):
         """
